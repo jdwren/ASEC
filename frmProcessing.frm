@@ -70,6 +70,8 @@ inp$ = vbNullString
 frmProcessing.MousePointer = vbHourglass
 TotalAbs = 0
 BlockSize = 60000
+'MEDLINE FTP will enable one to download sequential files from ftp://ftp.nlm.nih.gov/nlmdata/.medlease/
+'Change the loop to reflect the range of files and the year (medlineYY) to reflect the current year
 For f = 1 To 1259
     t = 0: u = 0
     If f < 10 Then
@@ -221,27 +223,6 @@ For f = 1 To 1259
                 If InStr(b$, "±") > 0 Then b$ = Replace(b$, "±", "+/-")
                 If InStr(b$, "×") > 0 Then b$ = Replace(b$, "×", "x")     'multiplication symbol
                 If InStr(b$, " ") > 0 Then b$ = Replace(b$, " ", " ")
-                If InStr(b$, "( ") > 0 Then b$ = Replace(b$, "( ", "(")
-                If InStr(b$, " )") > 0 Then b$ = Replace(b$, " )", ")")
-                If InStr(b$, " per cent ") > 0 Then b$ = Replace(b$, " per cent ", " percent ")
-                If InStr(b$, "less than or equal to") > 0 Then b$ = Replace(b$, "less than or equal to", "<=")
-                If InStr(b$, "p less than ") > 0 Then b$ = Replace(b$, "p less than ", "p<")
-                If InStr(b$, "P less than ") > 0 Then b$ = Replace(b$, "P less than ", "p<")
-                If InStr(b$, " confidence interval [CI]") > 0 Then b$ = Replace(b$, "95% confidence interval [CI]", " CI")
-                If InStr(b$, " confidence interval (CI)") > 0 Then b$ = Replace(b$, "95% confidence interval (CI)", " CI")
-                If InStr(b$, " confidence interval") > 0 Then b$ = Replace(b$, "95% confidence interval", " CI")
-                If InStr(b$, "odds ratio [OR]=") > 0 Then b$ = Replace(b$, "odds ratio [OR]=", "OR=")
-                If InStr(b$, "odds ratio (OR)=") > 0 Then b$ = Replace(b$, "odds ratio (OR)=", "OR=")
-                If InStr(b$, "< or =") > 0 Then b$ = Replace(b$, "< or =", "<=")
-                If InStr(b$, "> or =") > 0 Then b$ = Replace(b$, "> or =", ">=")
-                If InStr(b$, " +/- ") > 0 Then b$ = Replace(b$, " +/- ", "+/-")
-                If InStr(b$, " <= ") > 0 Then b$ = Replace(b$, " <= ", "<=")
-                If InStr(b$, " = ") > 0 Then b$ = Replace(b$, " = ", "=")
-                If InStr(b$, " < ") > 0 Then b$ = Replace(b$, " < ", "<")
-                If InStr(b$, " > ") > 0 Then b$ = Replace(b$, " > ", ">")
-                If InStr(b$, ", ,") > 0 Then b$ = Replace(b$, ", ,", ",")
-                If InStr(b$, " vs. ") > 0 Then b$ = Replace(b$, " vs. ", " vs ")
-                If InStr(b$, " v. ") > 0 Then b$ = Replace(b$, " v. ", " vs ")
             End If
                 
             If (TitStart > 0 Or AbStart > 0) And APflag = 0 Then        'only output those with at least a title & abstract
@@ -324,6 +305,7 @@ For f = 144 To 1259
         End If
         
         'PROCESS TEXT BLOCK
+        'Split all abstracts by their delimiter ("RecordText") into an array and process each one
         endflag = 0: lastPDpos = 1
         RecSP$ = Split(a$, "</RecordText>")
         RecUB = UBound(RecSP$) - 1
@@ -335,9 +317,16 @@ For f = 144 To 1259
             PMID = Val(Mid$(RecSP$(RecCt), PMIDst + 6, PMIDend - PMIDst - 6))
             AbStart = InStr(RecSP$(RecCt), "<RecordText>")
             b$ = " " & Right$(RecSP$(RecCt), Len(RecSP$(RecCt)) - AbStart - 12) & " "
+            'pre-processing steps to reduce textual variability in reportable items
+            If InStr(b$, "( ") > 0 Then b$ = Replace(b$, "( ", "(")
+            If InStr(b$, " )") > 0 Then b$ = Replace(b$, " )", ")")
+            If InStr(b$, "(") > 0 Then b$ = Replace(b$, "(", " (")      'to ensure % and ratio are separated by a space if otherwise not
+            If InStr(b$, "  ") > 0 Then b$ = Replace(b$, "  ", " ")     'eliminate double-spaces
+            If InStr(b$, " per cent ") > 0 Then b$ = Replace(b$, " per cent ", " percent ")
+            If InStr(b$, "percent") > 0 Then b$ = Replace(b$, "percent", "%")
+            If InStr(b$, " %") > 0 Then b$ = Replace(b$, " %", "%")
             LastPeriod = 0
             
-            If PMID = 12859115 Or PMID = 12923312 Then AbStart = 0       'problematic PMIDs
             If AbStart > 0 Then
                 sp$ = Split(b$, " ")
                 UB = UBound(sp$)
@@ -589,7 +578,10 @@ FileOut$ = "D:\ASEC MEDLINE Ratio-CI errors.txt"
 Open FileOut$ For Output As FileNum2
 Print #FileNum2, "PMID" & vbTab & "Ratio stmt" & vbTab & "R modified" & vbTab & "p-val" & vbTab & "rep. lower" & vbTab & "rep. R" & vbTab & "rep. upper" & vbTab & "calc R" & vbTab & "min R" & vbTab & "exact R" & vbTab & "max R" & vbTab & "min diff" & vbTab & "flag" & vbTab & "Journal" & vbTab & "context"
 
-For f = 214 To 1259          'Process MEDLINE XML files (patterns are sparse before file #214)
+'Process pre-processed MEDLINE XML files
+'Patterns are sparse before file #214 because they tend to be titles only and almost no ratio-CIs are in titles
+'change the values to iterate over whatever files are available
+For f = 214 To 1259
     If f < 10 Then
         fstr = "000" & Trim$(Str(f))
     ElseIf f < 100 Then
@@ -599,7 +591,7 @@ For f = 214 To 1259          'Process MEDLINE XML files (patterns are sparse bef
     Else
         fstr = Trim$(Str(f))
     End If
-    FileName$ = "D:\MEDLINE Processed\medline17n" & fstr & ".xml"           'MEDLINE XML is pre-processed to reduce variation (e.g., "p less than" converted to "p<")
+    FileName$ = "D:\MEDLINE Processed\medline17n" & fstr & ".xml"           'MEDLINE files generated by the pre-processing step (which reduces their size and extracts only key fields of interest)
     lblProgress.Caption = "Processing File# " & fstr: lblProgress.Refresh
     fsize = FileLen(FileName$)
     FileNum1 = FreeFile
@@ -629,6 +621,7 @@ For f = 214 To 1259          'Process MEDLINE XML files (patterns are sparse bef
         RecSP$ = Split(a$, "</RecordText>")
         RecUB = UBound(RecSP$) - 1
         For RecCt = 0 To RecUB
+            'Get date, PMID, journal name and title/abstract
             PubDatePos = InStr(RecSP$(RecCt), "</PubDate>")
             dat$ = Mid$(RecSP$(RecCt), PubDatePos - 8, 8)
             PMIDst = InStr(RecSP$(RecCt), "<PMID>")
@@ -639,11 +632,27 @@ For f = 214 To 1259          'Process MEDLINE XML files (patterns are sparse bef
             JName$ = Mid$(RecSP$(RecCt), JnameSt + 9, JnameEnd - JnameSt - 9)
             AbStart = InStr(RecSP$(RecCt), "<RecordText>")
             b$ = " " & Right$(RecSP$(RecCt), Len(RecSP$(RecCt)) - AbStart - 12) & " "
+            'Steps to reduce textual variability in reported items of interest (ratio-CI pairs in this case)
             If InStr(b$, "{") > 0 Then b$ = Replace(b$, "{", "(")       'standardize parentheticals
             If InStr(b$, "}") > 0 Then b$ = Replace(b$, "}", "(")
             If InStr(b$, "[") > 0 Then b$ = Replace(b$, "[", "(")
             If InStr(b$, "]") > 0 Then b$ = Replace(b$, "]", ")")
             If InStr(b$, "( ") > 0 Then b$ = Replace(b$, "( ", "(")
+            If InStr(b$, " )") > 0 Then b$ = Replace(b$, " )", ")")
+            If InStr(b$, "less than or equal to") > 0 Then b$ = Replace(b$, "less than or equal to", "<=")
+            If InStr(b$, "equals") > 0 Then b$ = Replace(b$, "equals", "=")
+            If InStr(b$, " less than ") > 0 Then b$ = Replace(b$, " less than ", "<")
+            If InStr(b$, " greater than ") > 0 Then b$ = Replace(b$, " greater than ", ">")
+            If InStr(b$, "< or =") > 0 Then b$ = Replace(b$, "< or =", "<=")
+            If InStr(b$, "> or =") > 0 Then b$ = Replace(b$, "> or =", ">=")
+            If InStr(b$, " +/- ") > 0 Then b$ = Replace(b$, " +/- ", "+/-")
+            If InStr(b$, " <= ") > 0 Then b$ = Replace(b$, " <= ", "<=")
+            If InStr(b$, " = ") > 0 Then b$ = Replace(b$, " = ", "=")
+            If InStr(b$, " < ") > 0 Then b$ = Replace(b$, " < ", "<")
+            If InStr(b$, " > ") > 0 Then b$ = Replace(b$, " > ", ">")
+            If InStr(b$, ", ,") > 0 Then b$ = Replace(b$, ", ,", ",")
+            If InStr(b$, " vs. ") > 0 Then b$ = Replace(b$, " vs. ", " vs ")
+            If InStr(b$, " v. ") > 0 Then b$ = Replace(b$, " v. ", " vs ")
             If InStr(b$, "(") > 0 Then b$ = Replace(b$, "(", " (")      'add space on left (so that ratio statements are on the leftmost side of each word)
             If InStr(b$, "  (") > 0 Then b$ = Replace(b$, "  (", " (")  'strip double spaces
             If InStr(b$, " =") > 0 Then b$ = Replace(b$, " =", "=")
